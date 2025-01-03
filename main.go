@@ -61,10 +61,6 @@ func registerUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Mock: คุณสามารถเพิ่มการบันทึกข้อมูลลงฐานข้อมูลได้ที่นี่
-	// ตัวอย่างเช่น: บันทึกลง MySQL หรือ PostgreSQL
-
-	// ส่งข้อความตอบกลับ
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "User registered successfully!",
 		"data":    data,
