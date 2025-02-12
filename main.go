@@ -20,7 +20,6 @@ type RegistrationRequest struct {
 	ConfirmPassword   string            `json:"confirmPassword"`
 	FirstName         string            `json:"firstName"`
 	LastName          string            `json:"lastName"`
-	Gender            string            `json:"gender"`
 	Phone             string            `json:"phone"`
 	Address           Address           `json:"address"`
 	HealthInformation HealthInformation `json:"healthInformation"`
@@ -28,6 +27,7 @@ type RegistrationRequest struct {
 
 // Address โครงสร้างข้อมูลสำหรับที่อยู่
 type Address struct {
+	AddressDescription string `json:"addressDescription"`
 	SubDistrict string `json:"subDistrict"`
 	District    string `json:"district"`
 	Province    string `json:"province"`
@@ -42,19 +42,19 @@ type HealthInformation struct {
 
 // User โครงสร้างข้อมูลที่บันทึกลงในฐานข้อมูล
 type User struct {
-	ID                uint   `gorm:"primaryKey"`
-	Email             string `gorm:"unique;not null"`
-	Password          string `gorm:"not null"`
-	FirstName         string `gorm:"not null"`
-	LastName          string `gorm:"not null"`
-	Gender            string `gorm:"not null"`
-	Phone             string `gorm:"not null"`
-	SubDistrict       string
-	District          string
-	Province          string
-	ZipCode           string
-	ChronicDisease    string
-	MedicationAllergy string
+	ID                 uint   `gorm:"primaryKey"`
+	Email              string `gorm:"unique;not null"`
+	Password           string `gorm:"not null"`
+	FirstName          string `gorm:"not null"`
+	LastName           string `gorm:"not null"`
+	Phone              string `gorm:"not null"`
+	AddressDescription string
+	SubDistrict        string
+	District           string
+	Province           string
+	ZipCode            string
+	ChronicDisease     string
+	MedicationAllergy  string
 }
 
 // initDatabase ฟังก์ชันสำหรับเชื่อมต่อฐานข้อมูล
@@ -111,7 +111,6 @@ func registerUser(c *fiber.Ctx) error {
 		Password:          string(hashedPassword),
 		FirstName:         data.FirstName,
 		LastName:          data.LastName,
-		Gender:            data.Gender,
 		Phone:             data.Phone,
 		SubDistrict:       data.Address.SubDistrict,
 		District:          data.Address.District,
@@ -174,7 +173,7 @@ func main() {
 
 	app := fiber.New()
 
-	// เปิดใช้ CORS เพื่อให้เชื่อมต่อกับ Frontend ได้
+	// เปิดใช้ CORS เพื่อให้เชื่อมต่อกับ Frontend ได้c
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000", // URL ของ Frontend
 		AllowMethods: "GET,POST,PUT,DELETE",
