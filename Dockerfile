@@ -1,23 +1,29 @@
-# ใช้ Base Image ที่รองรับ Go 1.23
-FROM golang:1.23
+# Stage 1: Build Go binary
+FROM golang:1.23 AS builder
 
-# ตั้งโฟลเดอร์ทำงานใน container
 WORKDIR /app
 
-# คัดลอก go.mod และ go.sum ไปยัง container
+# Copy dependencies
 COPY go.mod go.sum ./
+RUN go mod tidy && go mod download
 
-# ติดตั้ง dependencies
-RUN go mod download
-
-# คัดลอกไฟล์โค้ดทั้งหมด
+# Copy source code
 COPY . .
 
-# คอมไพล์ Go เป็นไฟล์ binary
-RUN go build -o main .
+# Build binary แบบ static เพื่อให้รองรับ Alpine Linux
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /app/main .
 
-# เปิดพอร์ต 3001
+# Stage 2: Run the binary
+FROM alpine:latest
+
+WORKDIR /root/
+
+# Copy compiled binary จาก builder stage
+COPY --from=builder /app/main /root/main
+
+# ให้สิทธิ์ execute ไฟล์ main
+RUN chmod +x /root/main
+
 EXPOSE 3001
 
-# คำสั่งเริ่มต้นเมื่อ container รัน
-CMD ["./main"]
+CMD ["/root/main"]
