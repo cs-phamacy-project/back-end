@@ -21,4 +21,6 @@ func AuthRoutes(app *fiber.App) {
 	api.Get("/medicines/:id", handlers.GetMedicineByID)
 	api.Get("/pharmacies/unapproved", handlers.GetUnapprovedPharmacies)
 	api.Get("/categories", handlers.GetAllCategories)
+	app.Put("/api/medicines/:id", handlers.UpdateMedicine)
+
 }

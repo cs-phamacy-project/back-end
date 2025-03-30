@@ -85,37 +85,23 @@ func UpdateMedicine(c *fiber.Ctx) error {
         return c.Status(404).JSON(fiber.Map{"error": "Medicine not found"})
     }
 
-    form, err := c.MultipartForm()
-    if err != nil {
-        return c.Status(400).JSON(fiber.Map{"error": "Invalid form data"})
+    var updatedData models.Medicine
+    if err := c.BodyParser(&updatedData); err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": "Invalid JSON body"})
     }
 
-    data := form.Value
+    // Assign fields you allow to update
+    medicine.ProductName = updatedData.ProductName
+    medicine.Description = updatedData.Description
+    medicine.Fda = updatedData.Fda
+    medicine.ExpiredDate = updatedData.ExpiredDate
+    medicine.Status = updatedData.Status
+    medicine.Price = updatedData.Price
+    medicine.Stock = updatedData.Stock
+    medicine.CategoryID = updatedData.CategoryID
 
-    medicine.ProductName = data["product_name"][0]
-    medicine.Description = data["description"][0]
-    medicine.Fda = data["fda"][0]
-    medicine.ExpiredDate = data["expired_date"][0]
-    medicine.Status = data["status"][0]
-
-    price, _ := strconv.ParseFloat(data["price"][0], 64)
-    stock, _ := strconv.Atoi(data["stock"][0])
-    categoryID, _ := strconv.Atoi(data["category_id"][0])
-
-    medicine.Price = price
-    medicine.Stock = stock
-    medicine.CategoryID = uint(categoryID)
-
-    files := form.File["image"]
-    if len(files) > 0 {
-        file := files[0]
-        // สำหรับเทสต์: สมมติใช้ชื่อไฟล์เก็บไว้เฉย ๆ
-        medicine.Image = file.Filename
-
-        // ❌ ข้ามการ save ไฟล์
-        // path := fmt.Sprintf("./uploads/%s", file.Filename)
-        // c.SaveFile(file, path)
-    }
+    // ไม่ต้องจัดการ image ตรงนี้ ถ้าไม่ได้อัพโหลด
+    // ถ้าอยากอัพก็อาจต้องเพิ่ม logic upload image แบบ base64 หรือ URL ก็ได้
 
     if err := database.DB.Save(&medicine).Error; err != nil {
         return c.Status(500).JSON(fiber.Map{"error": "Failed to update medicine"})
