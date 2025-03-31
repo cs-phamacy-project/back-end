@@ -8,6 +8,8 @@ import (
 	"gomed/models"
 	"gomed/routes"
 	"gomed/seeder"
+	"gomed/handlers"
+	
 )
 
 func main() {
@@ -16,6 +18,7 @@ func main() {
 
 	// AutoMigrate
 	models.MigrateDB(database.DB)
+	handlers.SetupWebSocketServer()
 	seeder.SeedCategories()
 	// models.SeedAll()
 
@@ -24,11 +27,15 @@ func main() {
 	// เปิดใช้ CORS
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "*",
-		AllowMethods: "GET,POST,PUT,DELETE",	
+		AllowMethods: "GET,POST,PUT,DELETE",
+		AllowHeaders: "Origin, Content-Type, Accept",
 	}))
 
 	// API Routes
 	routes.AuthRoutes(app)
+	routes.SetupOrderRoutes(app)
+	routes.SetupPaymentRoutes(app)
+	routes.SetupChatRoutes(app)
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Backend Running")

@@ -9,14 +9,17 @@ type Cart struct {
 }
 
 type Order struct {
-    OrderID       uint    `gorm:"primaryKey"`
-    CartID              uint      `gorm:"not null;uniqueIndex"`
-    UserID        uint    `gorm:"not null"`
-    TotalQuantity int     `gorm:"not null"`
-    TotalAmount   float64 `gorm:"not null"`
-    OrderStatus   string  `gorm:"default:'pending'"`
-    PaymentStatus       string    `gorm:"default:'pending'"`
-    Items         []OrderItem `gorm:"foreignKey:OrderID"`
+	OrderID        uint    `gorm:"primaryKey"`
+	CartID         uint    `gorm:"not null;uniqueIndex"`
+	UserID         uint    `gorm:"not null"`
+	TotalQuantity  int     `gorm:"not null"`
+	TotalAmount    float64 `gorm:"not null"`
+	OrderStatus    string  `gorm:"default:'pending'"`
+	PaymentStatus  string  `gorm:"default:'pending'"`
+    PaymentMethod  string  `gorm:"default:'promptpay'"`
+	ShippingAddress string  `gorm:"not null"`
+	PhoneNumber    string  `gorm:"not null"`
+	Items          []OrderItem `gorm:"foreignKey:OrderID"`
 }
 
 type OrderItem struct {

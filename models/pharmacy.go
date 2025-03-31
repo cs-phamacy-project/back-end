@@ -4,6 +4,7 @@ type Pharmacy struct {
 	ID                 uint       `gorm:"primaryKey"`
 	Email              string     `gorm:"unique;not null"`
 	Password           string     `gorm:"not null"`
+	StoreName		   string     `gorm:"not null"`
 	FirstName          string     `gorm:"not null"`
 	LastName           string     `gorm:"not null"`
 	Phone              string     `gorm:"not null"`

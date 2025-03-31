@@ -29,6 +29,7 @@ type RegistrationPharmacyRequest struct {
 	ConfirmEmail    string `json:"confirmEmail"`
 	Password        string `json:"password"`
 	ConfirmPassword string `json:"confirmPassword"`
+	StoreName       string `json:"storeName"`
 	FirstName       string `json:"firstName"`
 	LastName        string `json:"lastName"`
 	Phone           string `json:"phone"`
@@ -128,6 +129,7 @@ func RegisterPharmacy(c *fiber.Ctx) error {
     pharmacy := models.Pharmacy{
         Email:              data.Email,
         Password:           string(hashedPassword),
+		StoreName:          data.StoreName,
         FirstName:          data.FirstName,
         LastName:           data.LastName,
         Phone:              data.Phone,
@@ -144,7 +146,7 @@ func RegisterPharmacy(c *fiber.Ctx) error {
     if err := database.DB.Create(&pharmacy).Error; err != nil {
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to save pharmacy to database"})
     }
-
+	
     return c.Status(fiber.StatusOK).JSON(fiber.Map{
         "message": "Pharmacy registered successfully!",
         "pharmacy": pharmacy,
@@ -162,8 +164,24 @@ func LoginUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
+	// ตรวจสอบว่าเป็น admin
+	var admin models.User
+	if database.DB.Where("email = ? AND role = ?", data.Email, "admin").First(&admin).Error == nil {
+		// ถ้าพบ admin
+		if err := bcrypt.CompareHashAndPassword([]byte(admin.Password), []byte(data.Password)); err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid password"})
+		}
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message": "Login successful",
+			"user":    admin,
+			"role":    "admin",
+		})
+	}
+
+	// ตรวจสอบว่าเป็น user ทั่วไป
 	var user models.User
-	if err := database.DB.Where("email = ?", data.Email).First(&user).Error; err == nil {
+	if database.DB.Where("email = ?", data.Email).First(&user).Error == nil {
+		// ถ้าพบ user
 		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password)); err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid password"})
 		}
@@ -175,28 +193,17 @@ func LoginUser(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := database.DB.Where("email = ?", data.Email).First(&user).Error; err == nil {
-		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password)); err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid password"})
-		}
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"message": "Login successful",
-			"user":    user,
-			"role":    "admin",
-		})
-	}
-
-
-
+	// ตรวจสอบว่าเป็น pharmacy staff
 	var pharmacy models.Pharmacy
-	if err := database.DB.Where("email = ?", data.Email).First(&pharmacy).Error; err == nil {
+	if database.DB.Where("email = ?", data.Email).First(&pharmacy).Error == nil {
+		// ถ้าพบ pharmacy
 		if err := bcrypt.CompareHashAndPassword([]byte(pharmacy.Password), []byte(data.Password)); err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid password"})
 		}
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"message":  "Login successful",
-			"user":     pharmacy,
-			"role":     "staff",
+			"message":     "Login successful",
+			"user":        pharmacy,
+			"role":        "staff",
 			"pharmacy_id": pharmacy.ID,
 		})
 	}
