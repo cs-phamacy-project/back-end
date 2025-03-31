@@ -15,12 +15,12 @@ func AuthRoutes(app *fiber.App) {
 	app.Get("/api/pharmacies/:id", handlers.GetPharmacyByID)
 	api.Post("/medicines", handlers.CreateMedicine)
 	api.Put("/:id/approve", handlers.ApprovePharmacy)
-	api.Post("/carts", handlers.CreateCart)
-	api.Post("/orders", handlers.CreateOrder)
-	api.Post("/order-items", handlers.AddOrderItem)
 	api.Get("/medicines/:id", handlers.GetMedicineByID)
 	api.Get("/pharmacies/unapproved", handlers.GetUnapprovedPharmacies)
 	api.Get("/categories", handlers.GetAllCategories)
 	app.Put("/api/medicines/:id", handlers.UpdateMedicine)
-
+	api.Post("/cart", handlers.AddToCart)                     
+    api.Get("/cart/:userId", handlers.GetCart)                
+    api.Put("/cart/item", handlers.UpdateCartItem)            
+    api.Delete("/cart/item/:cartItemId", handlers.RemoveCartItem)  
 }
