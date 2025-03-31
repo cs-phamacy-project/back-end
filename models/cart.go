@@ -1,11 +1,11 @@
 package models
 
 type Cart struct {
-    CartID     uint   `gorm:"primaryKey"`
-    UserID     uint   `gorm:"not null"`
-    PharmacyID  uint      `gorm:"not null"`
-    Status     string `gorm:"default:'active'"`
-    CartItems   []CartItem `gorm:"foreignKey:CartID"`
+    CartID     uint `gorm:"primaryKey;column:cart_id"`
+    UserID     uint `gorm:"column:user_id"`
+    PharmacyID uint `gorm:"column:pharmacy_id"` // ใช้ uint แทน *uint
+    Status     string
+    CartItems  []CartItem `gorm:"foreignKey:CartID"`
 }
 
 type Order struct {

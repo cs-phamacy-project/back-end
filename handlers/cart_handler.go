@@ -2,6 +2,7 @@ package handlers
 
 
 import (
+	"fmt"
 	"strconv"
 	"gomed/database"
 	"gomed/models"
@@ -27,127 +28,154 @@ type AddToCartResponse struct {
 
 // AddToCart เพิ่มสินค้าลงในตะกร้า
 func AddToCart(c *fiber.Ctx) error {
-	var request AddToCartRequest
-	if err := c.BodyParser(&request); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(AddToCartResponse{
-			Success: false,
-			Message: "ข้อมูลไม่ถูกต้อง: " + err.Error(),
-		})
-	}
+    var request AddToCartRequest
+    if err := c.BodyParser(&request); err != nil {
+        return c.Status(fiber.StatusBadRequest).JSON(AddToCartResponse{
+            Success: false,
+            Message: "ข้อมูลไม่ถูกต้อง: " + err.Error(),
+        })
+    }
 
-	db := database.GetDB()
+    db := database.GetDB()
 
-	// ตรวจสอบว่ามีตะกร้าของผู้ใช้และร้านขายยานี้อยู่แล้วหรือไม่
-	var cart models.Cart
-	result := db.Where("user_id = ? AND pharmacy_id = ? AND status = ?", 
-		request.UserID, request.PharmacyID, "active").First(&cart)
+    // ตรวจสอบว่ามีตะกร้าของผู้ใช้อยู่แล้วหรือไม่
+    var cart models.Cart
+    result := db.Where("user_id = ? AND status = ?", request.UserID, "active").First(&cart)
 
-	// ถ้ายังไม่มีตะกร้า ให้สร้างตะกร้าใหม่
-	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			cart = models.Cart{
-				UserID:     request.UserID,
-				PharmacyID: request.PharmacyID,
-				Status:     "active",
-			}
-			if err := db.Create(&cart).Error; err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
-					Success: false,
-					Message: "ไม่สามารถสร้างตะกร้าใหม่ได้: " + err.Error(),
-				})
-			}
-		} else {
-			return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
-				Success: false,
-				Message: "เกิดข้อผิดพลาดในการค้นหาตะกร้า: " + result.Error.Error(),
-			})
-		}
-	}
+    if result.Error == nil {
+        // พบตะกร้า - ตรวจสอบว่า pharmacy_id เป็น 0 หรือตรงกับร้านที่กำลังเพิ่มสินค้า
+        if cart.PharmacyID == 0 {
+            // อัปเดต pharmacy_id ให้เป็นของร้านใหม่
+            if err := db.Model(&cart).Update("pharmacy_id", request.PharmacyID).Error; err != nil {
+                return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
+                    Success: false,
+                    Message: "ไม่สามารถอัปเดตข้อมูลร้านค้าในตะกร้าได้: " + err.Error(),
+                })
+            }
+        } else if cart.PharmacyID != request.PharmacyID {
+            // ถ้า pharmacy_id ไม่ใช่ 0 และไม่ตรงกับร้านที่กำลังเพิ่มสินค้า
+            return c.Status(fiber.StatusBadRequest).JSON(AddToCartResponse{
+                Success: false,
+                Message: "ไม่สามารถเพิ่มสินค้าจากร้านขายยาอื่นได้ กรุณาซื้อสินค้าจากร้านเดียวกันเท่านั้น หรือล้างตะกร้าก่อนสั่งซื้อจากร้านใหม่",
+            })
+        }
+    } else if result.Error == gorm.ErrRecordNotFound {
+        // ไม่พบตะกร้า - สร้างตะกร้าใหม่
+        cart = models.Cart{
+            UserID:     request.UserID,
+            PharmacyID: request.PharmacyID,
+            Status:     "active",
+        }
+        if err := db.Create(&cart).Error; err != nil {
+            return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
+                Success: false,
+                Message: "ไม่สามารถสร้างตะกร้าใหม่ได้: " + err.Error(),
+            })
+        }
+    } else {
+        // เกิดข้อผิดพลาดอื่นๆ
+        return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
+            Success: false,
+            Message: "เกิดข้อผิดพลาดในการค้นหาตะกร้า: " + result.Error.Error(),
+        })
+    }
 
-	// ตรวจสอบว่ามีสินค้านี้ในตะกร้าแล้วหรือไม่
-	var cartItem models.CartItem
-	result = db.Where("cart_id = ? AND medicine_id = ?", cart.CartID, request.MedicineID).First(&cartItem)
+    // ตรวจสอบว่ามีสินค้านี้ในตะกร้าแล้วหรือไม่
+    var cartItem models.CartItem
+    result = db.Where("cart_id = ? AND medicine_id = ?", cart.CartID, request.MedicineID).First(&cartItem)
 
-	// ถ้ามีสินค้านี้ในตะกร้าแล้ว ให้อัปเดตจำนวน
-	if result.Error == nil {
-		cartItem.Quantity += request.Quantity
-		if err := db.Save(&cartItem).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
-				Success: false,
-				Message: "ไม่สามารถอัปเดตจำนวนสินค้าในตะกร้าได้: " + err.Error(),
-			})
-		}
-	} else if result.Error == gorm.ErrRecordNotFound {
-		// ถ้ายังไม่มีสินค้านี้ในตะกร้า ให้เพิ่มสินค้าใหม่
-		cartItem = models.CartItem{
-			CartID:     cart.CartID,
-			MedicineID: request.MedicineID,
-			Quantity:   request.Quantity,
-		}
-		if err := db.Create(&cartItem).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
-				Success: false,
-				Message: "ไม่สามารถเพิ่มสินค้าลงตะกร้าได้: " + err.Error(),
-			})
-		}
-	} else {
-		return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
-			Success: false,
-			Message: "เกิดข้อผิดพลาดในการค้นหาสินค้าในตะกร้า: " + result.Error.Error(),
-		})
-	}
+    // ถ้ามีสินค้านี้ในตะกร้าแล้ว ให้อัปเดตจำนวน
+    if result.Error == nil {
+        cartItem.Quantity += request.Quantity
+        if err := db.Save(&cartItem).Error; err != nil {
+            return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
+                Success: false,
+                Message: "ไม่สามารถอัปเดตจำนวนสินค้าในตะกร้าได้: " + err.Error(),
+            })
+        }
+    } else if result.Error == gorm.ErrRecordNotFound {
+        // ถ้ายังไม่มีสินค้านี้ในตะกร้า ให้เพิ่มสินค้าใหม่
+        cartItem = models.CartItem{
+            CartID:     cart.CartID,
+            MedicineID: request.MedicineID,
+            Quantity:   request.Quantity,
+        }
+        if err := db.Create(&cartItem).Error; err != nil {
+            return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
+                Success: false,
+                Message: "ไม่สามารถเพิ่มสินค้าลงตะกร้าได้: " + err.Error(),
+            })
+        }
+    } else {
+        return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
+            Success: false,
+            Message: "เกิดข้อผิดพลาดในการค้นหาสินค้าในตะกร้า: " + result.Error.Error(),
+        })
+    }
 
-	// ดึงข้อมูลสินค้าใหม่
-	if err := db.Preload("Medicine").First(&cartItem, cartItem.CartItemID).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
-			Success: false,
-			Message: "เพิ่มสินค้าสำเร็จแล้ว แต่พบข้อผิดพลาดในการดึงข้อมูล",
-		})
-	}
+    // ดึงข้อมูลสินค้าใหม่
+    if err := db.Preload("Medicine").First(&cartItem, cartItem.CartItemID).Error; err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(AddToCartResponse{
+            Success: false,
+            Message: "เพิ่มสินค้าสำเร็จแล้ว แต่พบข้อผิดพลาดในการดึงข้อมูล",
+        })
+    }
 
-	return c.Status(fiber.StatusOK).JSON(AddToCartResponse{
-		Success: true,
-		Message: "เพิ่มสินค้าลงตะกร้าเรียบร้อยแล้ว",
-		CartID:  cart.CartID,
-		Item:    &cartItem,
-	})
+    return c.Status(fiber.StatusOK).JSON(AddToCartResponse{
+        Success: true,
+        Message: "เพิ่มสินค้าลงตะกร้าเรียบร้อยแล้ว",
+        CartID:  cart.CartID,
+        Item:    &cartItem,
+    })
 }
 
 // ฟังก์ชั่นเพิ่มเติมที่อาจเป็นประโยชน์
 
 // GetCart ดึงข้อมูลตะกร้าสินค้าของผู้ใช้
 func GetCart(c *fiber.Ctx) error {
-	userID, err := strconv.ParseUint(c.Params("userId"), 10, 64)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user ID"})
-	}
+    userID, err := strconv.ParseUint(c.Params("userId"), 10, 64)
+    if err != nil {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid user ID"})
+    }
 
-	db := database.GetDB()
-	var cart models.Cart
-	result := db.Where("user_id = ? AND status = ?", userID, "active").
-		Preload("CartItems").
-		Preload("CartItems.Medicine").
-		First(&cart)
+    db := database.GetDB()
+    var cart models.Cart
+    result := db.Where("user_id = ? AND status = ?", userID, "active").
+        Preload("CartItems").
+        Preload("CartItems.Medicine").
+        First(&cart)
 
-	if result.Error != nil {
-		if result.Error == gorm.ErrRecordNotFound {
-			return c.Status(fiber.StatusOK).JSON(fiber.Map{
-				"success": true,
-				"message": "ยังไม่มีตะกร้าสินค้า",
-				"cart":    nil,
-			})
-		}
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "เกิดข้อผิดพลาดในการดึงข้อมูลตะกร้า: " + result.Error.Error(),
-		})
-	}
+    if result.Error != nil {
+        if result.Error == gorm.ErrRecordNotFound {
+            return c.Status(fiber.StatusOK).JSON(fiber.Map{
+                "success": true,
+                "message": "ยังไม่มีตะกร้าสินค้า",
+                "cart":    nil,
+            })
+        }
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "เกิดข้อผิดพลาดในการดึงข้อมูลตะกร้า: " + result.Error.Error(),
+        })
+    }
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"success": true,
-		"message": "ดึงข้อมูลตะกร้าสำเร็จ",
-		"cart":    cart,
-	})
+    // เพิ่มการตรวจสอบ - ถ้าไม่มีสินค้าในตะกร้า ให้รีเซ็ต pharmacy_id เป็น 0
+    if len(cart.CartItems) == 0 {
+        // รีเซ็ต pharmacy_id
+        if err := db.Exec("UPDATE carts SET pharmacy_id = 0 WHERE cart_id = ?", cart.CartID).Error; err != nil {
+            // แค่บันทึก log แต่ไม่ส่งข้อผิดพลาดกลับไป
+            fmt.Printf("Error resetting pharmacy_id: %v\n", err)
+        } else {
+            // อัปเดตค่าใน cart ที่จะส่งกลับไปด้วย
+            cart.PharmacyID = 0
+        }
+    }
+
+    return c.Status(fiber.StatusOK).JSON(fiber.Map{
+        "success": true,
+        "message": "ดึงข้อมูลตะกร้าสำเร็จ",
+        "cart":    cart,
+    })
 }
 
 // UpdateCartItem อัปเดตจำนวนสินค้าในตะกร้า
@@ -274,12 +302,12 @@ func ClearCartHandler(c *fiber.Ctx) error {
         })
     }
     
-    // รีเซ็ต pharmacy_id
-    if err := tx.Model(&models.Cart{}).Where("cart_id = ?", cart.CartID).Update("pharmacy_id", nil).Error; err != nil {
+    // รีเซ็ต pharmacy_id เป็น 0 แทนที่จะเป็น NULL
+    if err := tx.Exec("UPDATE carts SET pharmacy_id = 0 WHERE cart_id = ?", cart.CartID).Error; err != nil {
         tx.Rollback()
         return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
             "success": false,
-            "message": "Error resetting pharmacy ID",
+            "message": "Error resetting pharmacy ID: " + err.Error(),
         })
     }
     
@@ -353,9 +381,9 @@ func RemoveCartItemHandler(c *fiber.Ctx) error {
         })
     }
     
-    // ถ้าไม่มีสินค้าเหลือ ให้รีเซ็ต pharmacy_id
+    // ถ้าไม่มีสินค้าเหลือ ให้รีเซ็ต pharmacy_id เป็น 0 แทนที่จะเป็น NULL
     if count == 0 {
-        if err := tx.Model(&models.Cart{}).Where("cart_id = ?", cartItem.CartID).Update("pharmacy_id", nil).Error; err != nil {
+        if err := tx.Exec("UPDATE carts SET pharmacy_id = 0 WHERE cart_id = ?", cartItem.CartID).Error; err != nil {
             tx.Rollback()
             return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
                 "success": false,
