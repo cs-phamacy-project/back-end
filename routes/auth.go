@@ -22,5 +22,7 @@ func AuthRoutes(app *fiber.App) {
 	api.Post("/cart", handlers.AddToCart)                     
     api.Get("/cart/:userId", handlers.GetCart)                
     api.Put("/cart/item", handlers.UpdateCartItem)            
-    api.Delete("/cart/item/:cartItemId", handlers.RemoveCartItem)  
+    api.Delete("/cart/item/:cartItemId", handlers.RemoveCartItem)
+	api.Delete("/cart/clear/:userId", handlers.ClearCartHandler)
+	api.Delete("/cart/item/:cartItemId", handlers.RemoveCartItemHandler)
 }

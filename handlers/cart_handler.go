@@ -227,3 +227,153 @@ func RemoveCartItem(c *fiber.Ctx) error {
 		"message": "ลบสินค้าออกจากตะกร้าเรียบร้อย",
 	})
 }
+
+// ClearCartHandler สำหรับล้างตะกร้าทั้งหมดและรีเซ็ต pharmacy_id
+func ClearCartHandler(c *fiber.Ctx) error {
+    db := database.GetDB()
+    
+    userID, err := strconv.Atoi(c.Params("userId"))
+    if err != nil {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+            "success": false,
+            "message": "Invalid user ID",
+        })
+    }
+    
+    // ค้นหาตะกร้าของผู้ใช้
+    var cart models.Cart
+    result := db.Where("user_id = ? AND status = ?", userID, "active").First(&cart)
+    if result.Error != nil {
+        if result.Error == gorm.ErrRecordNotFound {
+            return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+                "success": false,
+                "message": "Cart not found",
+            })
+        }
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Error finding cart",
+        })
+    }
+    
+    // เริ่ม transaction
+    tx := db.Begin()
+    if tx.Error != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Failed to start transaction",
+        })
+    }
+    
+    // ลบทุกรายการสินค้าในตะกร้า
+    if err := tx.Where("cart_id = ?", cart.CartID).Delete(&models.CartItem{}).Error; err != nil {
+        tx.Rollback()
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Error clearing cart items",
+        })
+    }
+    
+    // รีเซ็ต pharmacy_id
+    if err := tx.Model(&models.Cart{}).Where("cart_id = ?", cart.CartID).Update("pharmacy_id", nil).Error; err != nil {
+        tx.Rollback()
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Error resetting pharmacy ID",
+        })
+    }
+    
+    // Commit transaction
+    if err := tx.Commit().Error; err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Failed to commit transaction",
+        })
+    }
+    
+    return c.JSON(fiber.Map{
+        "success": true,
+        "message": "Cart cleared successfully",
+    })
+}
+
+// RemoveCartItemHandler สำหรับลบสินค้าจากตะกร้า
+func RemoveCartItemHandler(c *fiber.Ctx) error {
+    db := database.GetDB()
+    
+    cartItemID, err := strconv.Atoi(c.Params("cartItemId"))
+    if err != nil {
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+            "success": false,
+            "message": "Invalid cart item ID",
+        })
+    }
+    
+    // ค้นหารายการสินค้าในตะกร้า
+    var cartItem models.CartItem
+    result := db.First(&cartItem, cartItemID)
+    if result.Error != nil {
+        if result.Error == gorm.ErrRecordNotFound {
+            return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+                "success": false,
+                "message": "Cart item not found",
+            })
+        }
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Error finding cart item",
+        })
+    }
+    
+    // เริ่ม transaction
+    tx := db.Begin()
+    if tx.Error != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Failed to start transaction",
+        })
+    }
+    
+    // ลบรายการสินค้า
+    if err := tx.Delete(&cartItem).Error; err != nil {
+        tx.Rollback()
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Error removing cart item",
+        })
+    }
+    
+    // ตรวจสอบว่ายังมีสินค้าเหลือในตะกร้าหรือไม่
+    var count int64
+    if err := tx.Model(&models.CartItem{}).Where("cart_id = ?", cartItem.CartID).Count(&count).Error; err != nil {
+        tx.Rollback()
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Error checking remaining items",
+        })
+    }
+    
+    // ถ้าไม่มีสินค้าเหลือ ให้รีเซ็ต pharmacy_id
+    if count == 0 {
+        if err := tx.Model(&models.Cart{}).Where("cart_id = ?", cartItem.CartID).Update("pharmacy_id", nil).Error; err != nil {
+            tx.Rollback()
+            return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+                "success": false,
+                "message": "Error resetting pharmacy ID",
+            })
+        }
+    }
+    
+    // Commit transaction
+    if err := tx.Commit().Error; err != nil {
+        return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+            "success": false,
+            "message": "Failed to commit transaction",
+        })
+    }
+    
+    return c.JSON(fiber.Map{
+        "success": true,
+        "message": "Item removed from cart",
+    })
+}
